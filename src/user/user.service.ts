@@ -6,7 +6,12 @@ import { v4 as uuidv4, validate } from 'uuid';
 @Injectable()
 export class UserService {
   private users: User[] = [];
-  create(createUserDto: CreateUserDto): User {
+  private validateId(id: string) {
+    if (!validate(id)) {
+      throw new HttpException('Неверный формат ID', HttpStatus.BAD_REQUEST);
+    }
+  }
+  create(createUserDto: CreateUserDto): Omit<User, 'password'> {
     if (!createUserDto.login || !createUserDto.password) {
       throw new HttpException(
         'Login and password are required',
@@ -21,7 +26,8 @@ export class UserService {
       updatedAt: Date.now(),
     };
     this.users.push(newUser);
-    return newUser;
+    const { password, ...newUserResponse } = newUser;
+    return newUserResponse;
   }
 
   findAll(): User[] {
@@ -29,9 +35,7 @@ export class UserService {
   }
 
   findOne(id: string): User | undefined {
-    if (!validate(id)) {
-      throw new HttpException('Invalid id', HttpStatus.BAD_REQUEST);
-    }
+    this.validateId(id);
     const user = this.users.find((user) => user.id === id);
     if (!user) {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
@@ -40,31 +44,38 @@ export class UserService {
   }
 
   update(id: string, updateUserDto: UpdateUserDto) {
-    if (!validate(id)) {
-      throw new HttpException('Invalid id', HttpStatus.BAD_REQUEST);
+    const { oldPassword, newPassword } = updateUserDto;
+    if (!oldPassword || !newPassword) {
+      throw new HttpException(
+        'Old password and new password are required',
+        HttpStatus.BAD_REQUEST,
+      );
     }
-    const user = this.findOne(id);
+    this.validateId(id);
+
+    const user = this.users.find((user) => user.id === id);
     if (!user) {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    }
+    if (updateUserDto.oldPassword !== user.password) {
+      throw new HttpException('Invalid password', HttpStatus.FORBIDDEN);
     }
     const updatedUser: User = {
       ...user,
-      ...updateUserDto,
+      password: newPassword,
       version: user.version + 1,
       updatedAt: Date.now(),
     };
+    const userIndex = this.users.findIndex((user) => user.id === id);
+    this.users[userIndex] = updatedUser;
+    const { password, ...updatedUserResponse } = updatedUser;
 
-    return updatedUser;
+    return updatedUserResponse;
   }
 
   remove(id: string) {
-    if (!validate(id)) {
-      throw new HttpException('Invalid id', HttpStatus.BAD_REQUEST);
-    }
-    const user = this.findOne(id);
-    if (!user) {
-      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-    }
+    this.validateId(id);
+    this.findOne(id);
     return (this.users = this.users.filter((user) => user.id !== id));
   }
 }

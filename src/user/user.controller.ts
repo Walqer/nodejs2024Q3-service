@@ -3,12 +3,12 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
   Delete,
   Res,
   HttpStatus,
   HttpException,
+  Put,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -18,7 +18,16 @@ import { Response } from 'express';
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
-
+  private handleError(error: unknown, res: Response) {
+    if (error instanceof HttpException) {
+      return res.status(error.getStatus()).send(error.message);
+    } else {
+      console.error('Unexpected error:', error);
+      return res
+        .status(StatusCodes.INTERNAL_SERVER_ERROR)
+        .send('Internal Server Error');
+    }
+  }
   @Post()
   create(@Body() createUserDto: CreateUserDto) {
     return this.userService.create(createUserDto);
@@ -27,10 +36,9 @@ export class UserController {
   @Get()
   findAll(@Res() res: Response) {
     try {
-      return res.status(HttpStatus.OK).send(this.userService.findAll());
+      return this.userService.findAll();
     } catch (error) {
-      console.log(error);
-      return res.status(error.status).send(error);
+      this.handleError(error, res);
     }
   }
 
@@ -39,9 +47,17 @@ export class UserController {
     return this.userService.findOne(id);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.userService.update(id, updateUserDto);
+  @Put(':id')
+  update(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+    @Res() res: Response,
+  ) {
+    try {
+      return this.userService.update(id, updateUserDto);
+    } catch (error: unknown) {
+      this.handleError(error, res);
+    }
   }
 
   @Delete(':id')
@@ -53,14 +69,7 @@ export class UserController {
       this.userService.remove(id);
       return res.status(HttpStatus.NO_CONTENT).send();
     } catch (error: unknown) {
-      if (error instanceof HttpException) {
-        return res.status(error.getStatus()).send(error.message);
-      } else {
-        console.error('Unexpected error:', error);
-        return res
-          .status(StatusCodes.INTERNAL_SERVER_ERROR)
-          .send('Internal Server Error');
-      }
+      this.handleError(error, res);
     }
   }
 }
